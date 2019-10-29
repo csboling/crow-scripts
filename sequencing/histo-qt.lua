@@ -89,15 +89,16 @@ end
 function select_notes(samples)
   notes = {}
   for i=1,#samples do
-    notes[samples[i] % 4 + 1] = samples[i]
+    notes[i] = samples[i]
   end
+  return notes
 end
 
 input[2].change = function (v)
   update_cdf()
   local samples = draw_samples(4)
   local notes = select_notes(samples)
-  for i=1,4 do
+  for i=1,3 do
     output[i].volts = notes[i] / 12
   end
 end
@@ -130,5 +131,7 @@ function init()
   input[2].mode('change', 1, 0.1, 'rising')
   metro[1].time = 3
   metro[1]:start()
+  output[4].action = lfo(1, 1)
+  output[4]()
   print('loaded')
 end

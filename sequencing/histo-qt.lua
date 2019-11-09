@@ -10,6 +10,8 @@ major = {  0 / 12
 	, 11 / 12
         }
 
+t_s = 0.1
+
 bin_depth = 25
 
 function set_scale(scale)
@@ -22,7 +24,7 @@ function set_scale(scale)
 end
 
 function set_halflife(halflife)
-  leak_coeff = math.pow(0.5, (1 / halflife))
+  leak_coeff = math.pow(0.5, (t_s / halflife))
 end
 
 function quantize(volts, scale)
@@ -125,12 +127,12 @@ end
 
 function init()
   histo = {}
-  set_halflife(60)
+  set_halflife(30)
   set_scale(major)
   flush_histo()
   update_cdf()
 
-  input[1].mode('stream', 0.1)
+  input[1].mode('stream', t_s)
   input[2].mode('change', 1, 0.1, 'rising')
   metro[1].time = 1
   metro[1]:start()

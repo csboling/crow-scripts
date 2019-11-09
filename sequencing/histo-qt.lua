@@ -1,28 +1,45 @@
 -- histo quantizer - draw from learned CV distribution
-decay = 0.98
 monitor = false
 
-major = {0, 2, 4, 5, 7, 9, 11, 12 }
-curr_scale = major
+major = {  0 / 12
+	,  2 / 12
+	,  4 / 12
+	,  5 / 12
+	,  7 / 12
+	,  9 / 12
+	, 11 / 12
+        }
+
+bin_depth = 25
+
+function set_scale(scale)
+  curr_scale = {}
+  for i=1,5 do
+    for j=1,#scale do
+      curr_scale[(i - 1) * #scale + (j - 1) + 1] = (i - 1) + scale[j]
+    end
+  end
+end
+
+function set_halflife(halflife)
+  leak_coeff = math.pow(0.5, (1 / halflife))
+end
 
 function quantize(volts, scale)
-  local octave = math.floor(volts)
-  local interval = volts - octave
-  local semitones = interval * #scale
-  local degree = 1
-  while degree < #scale and semitones > scale[degree+1]  do
-    degree = degree + 1
+  local min = 1000
+  local min_ix = 1
+  for i=1,#scale do
+    local d = math.abs(volts - scale[i])
+    if d < min then
+       min = d
+       min_ix = i
+    end
   end
-  local above = scale[degree+1] - semitones
-  local below = semitones - scale[degree]
-  if below > above then
-    degree = degree + 1
-  end
-  return octave, degree
+  return min, min_ix
 end
 
 function flush_histo()
-  for i=1,5*#curr_scale do
+  for i=1,#curr_scale do
     histo[i] = { count = 0
 	       , degree = i
                , cdf = i / #curr_scale
@@ -30,16 +47,18 @@ function flush_histo()
   end
 end
 
+function sum_clip_bin(count, incr)
+  if count < bin_depth then
+     count = count + 1
+  end
+  return count
+end
+
 function update_histo(deg)
   for i=1,#histo do
+     histo[i].count = leak_coeff * histo[i].count
      if histo[i].degree == deg then
-	local incr = 1
-	if histo[i].count > 25 then
-	  incr = math.exp(25 - histo[i].count)
-	end
-	histo[i].count = histo[i].count + incr
-     else
-	histo[i].count = histo[i].count * decay
+	histo[i].count = sum_clip_bin(histo[i].count, 1)
      end
   end
 end
@@ -64,9 +83,7 @@ function draw_samples(count)
     local r = math.random()
     local j = 1
     for j=1,#histo do
-      local d = histo[j].degree % #curr_scale
-      local o = math.floor(histo[j].degree / #curr_scale)
-      samples[i] = o*#curr_scale + curr_scale[d + 1]
+      samples[i] = curr_scale[histo[j].degree]
       if histo[j].cdf >= r then
         break
       end
@@ -77,29 +94,15 @@ end
 
 input[1].stream = function(v)
   _c.tell('stream', 1, v)
-  local oct, deg = quantize(v, curr_scale)
-  if oct < 0 then
-     oct = 0
-  elseif oct > 4 then
-     oct = 4
-  end
-  update_histo(oct*#curr_scale + deg)
-end
-
-function select_notes(samples)
-  notes = {}
-  for i=1,#samples do
-    notes[i] = samples[i]
-  end
-  return notes
+  local err, ix = quantize(v, curr_scale)
+  update_histo(ix)
 end
 
 input[2].change = function (v)
   update_cdf()
   local samples = draw_samples(4)
-  local notes = select_notes(samples)
   for i=1,3 do
-    output[i].volts = notes[i] / 12
+    output[i].volts = samples[i]
   end
 end
 
@@ -122,16 +125,14 @@ end
 
 function init()
   histo = {}
+  set_halflife(60)
+  set_scale(major)
   flush_histo()
   update_cdf()
-  for i=1,4 do
-    output[i].slew = 0.05
-  end
+
   input[1].mode('stream', 0.1)
   input[2].mode('change', 1, 0.1, 'rising')
-  metro[1].time = 3
+  metro[1].time = 1
   metro[1]:start()
-  output[4].action = lfo(1, 1)
-  output[4]()
   print('loaded')
 end
